@@ -86,7 +86,7 @@ contract MainContract is IERC721Receiver {
     mapping(baseFractionToken => allVotingInfo) AllVotingInfo;
     //mapping(address => mapping(ERC20 => uint)) tokenBalances;
 
-    modifier isInProposalOrAuction(baseFractionToken token) {
+    modifier isProposalOrAuctionNotActive(baseFractionToken token) {
         uint latestProposal = AllVotingInfo[token].proposals.length;
         uint latestAuction = AllVotingInfo[token].auctions.length;
 
@@ -125,7 +125,7 @@ contract MainContract is IERC721Receiver {
         NFTDeposit memory newInfo;
         newInfo.NFT = ERC721(_NFTContractAddress);
         require(newInfo.NFT.ownerOf(_tokenId) == msg.sender, "You do not own this NFT");
-        
+
         depositsMade++;
         //can this be reentrency
         newInfo.NFT.safeTransferFrom(msg.sender, address(this), _tokenId);
@@ -155,8 +155,6 @@ contract MainContract is IERC721Receiver {
 
                 baseFractionToken fractionToken = new baseFractionToken(
                     msg.sender,
-                    //nftDeposits[msg.sender].deposits[i].NFTContractAddress,
-                    //nftDeposits[msg.sender].deposits[i].tokenId,
                     _royaltyPercentage,
                     _supply,
                     _tokenName,
@@ -166,8 +164,6 @@ contract MainContract is IERC721Receiver {
                 nftDeposits[msg.sender].deposits[i].hasFractionalised = true;
                 nftDeposits[msg.sender].deposits[i].fractionToken = fractionToken;
                 nftDeposits[msg.sender].deposits[i].fractionContractAddress = address(fractionToken);
-                nftDeposits[msg.sender].deposits[i].fractionToken = baseFractionToken(nftDeposits[msg.sender].deposits[i].fractionContractAddress);
-                //newTokenAddress = address(newFraction);
                 break;
             }
         }
@@ -193,19 +189,12 @@ contract MainContract is IERC721Receiver {
                 }
             }
         }
-        //parentContract.safeTransferFrom(address(this), msg.sender, _tokenId);
     }
 
     function updateNftOwner(address _oldOwner, address _newOwner, NFTDeposit memory _nftDeposit) public {
-        //add require statement
         require(_nftDeposit.isChangingOwnership == true, "NFT is not changing ownership");
-
-        //for (uint i = 0; i < nftDeposits[_oldOwner].length; i++) {
-        //    if (nftDeposits[_oldOwner].deposits[i].NFT == ERC721) {
-        //        nftDeposits[_oldOwner].deposits[i].owner = _newOwner;
-        //        nftDeposits[_oldOwner].deposits[i].fractionToken.updateNFTOwner(_newOwner);
-        //    }
-        //}
+        _nftDeposit.owner = _newOwner;
+        _nftDeposit.isChangingOwnership = false;
     }
 
     function buyoutAllTokens(address _NFTContractAddress, uint256 _tokenId) public {
@@ -224,8 +213,7 @@ contract MainContract is IERC721Receiver {
             }
     }
 
-    function startBuyoutProposal(baseFractionToken _token, NFTDeposit memory _nftDeposit) isInProposalOrAuction(_token) public payable{
-
+    function startBuyoutProposal(baseFractionToken _token, NFTDeposit memory _nftDeposit) isProposalOrAuctionNotActive(_token) public payable{
         buyoutProposal memory newProposal; 
         
         newProposal.finishTime = block.timestamp + DEFAULT_WAIT_TIME;
@@ -252,37 +240,37 @@ contract MainContract is IERC721Receiver {
         require (AllVotingInfo[Token].proposals[latestProposal].active == true, "proposal is not active");
         require (hasVotedInProposal[msg.sender][id] == false, "this user has already voted");
 
-        if (block.timestamp < AllVotingInfo[Token].proposals[latestProposal].finishTime) {
-            stakeTokens(AllVotingInfo[Token].proposals[latestProposal].nftDeposit.fractionToken, _voteAmount);
-            hasVotedInProposal[msg.sender][id] = true;
-            voteValueInProposal[msg.sender][id] = _voteValue;
-           
-            AllVotingInfo[Token].proposals[latestProposal].totalVoted += _voteAmount;
+       if (block.timestamp < AllVotingInfo[Token].proposals[latestProposal].finishTime) {
+           stakeTokens(AllVotingInfo[Token].proposals[latestProposal].nftDeposit.fractionToken, _voteAmount);
+           hasVotedInProposal[msg.sender][id] = true;
+           voteValueInProposal[msg.sender][id] = _voteValue;
 
-            if (_voteValue == true) {
-                AllVotingInfo[Token].proposals[latestProposal].totalAmountAgree += _voteAmount;
-            } else {
-                AllVotingInfo[Token].proposals[latestProposal].totalAmountDisagree += _voteAmount;
-            }
+           AllVotingInfo[Token].proposals[latestProposal].totalVoted += _voteAmount;
 
-            // percentage agree
-            if(_NFTDeposit.supply * AllVotingInfo[Token].proposals[latestProposal].totalAmountAgree / 100 
-                >= DEFAULT_PROPOSAL_TO_PASS) {
-                AllVotingInfo[Token].proposals[latestProposal].active = false;
-                startBuyoutAuction(Token, AllVotingInfo[Token].proposals[latestProposal]);
-            }
-            //percentage disagree
-            else if (_NFTDeposit.supply * AllVotingInfo[Token].proposals[latestProposal].totalAmountDisagree / 100 
-                    >= DEFAULT_PROPOSAL_TO_PASS) {
-                    AllVotingInfo[Token].proposals[latestProposal].active = false;
-                    payable(AllVotingInfo[Token].proposals[latestProposal].proposalInitiator).transfer(AllVotingInfo[Token].proposals[latestProposal].buyoutPriceStart);
+           if (_voteValue == true) {
+               AllVotingInfo[Token].proposals[latestProposal].totalAmountAgree += _voteAmount;
+           } else {
+               AllVotingInfo[Token].proposals[latestProposal].totalAmountDisagree += _voteAmount;
+           }
 
-            }
-        } else {
-            if (AllVotingInfo[Token].proposals[latestProposal].active == true) {
-                AllVotingInfo[Token].proposals[latestProposal].active = false;
-            }
-        }
+           // percentage agree
+           if(_NFTDeposit.supply * AllVotingInfo[Token].proposals[latestProposal].totalAmountAgree / 100 
+               >= DEFAULT_PROPOSAL_TO_PASS) {
+               AllVotingInfo[Token].proposals[latestProposal].active = false;
+               startBuyoutAuction(Token, AllVotingInfo[Token].proposals[latestProposal]);
+           }
+           //percentage disagree
+           else if (_NFTDeposit.supply * AllVotingInfo[Token].proposals[latestProposal].totalAmountDisagree / 100 
+                   >= DEFAULT_PROPOSAL_TO_PASS) {
+                   AllVotingInfo[Token].proposals[latestProposal].active = false;
+                   payable(AllVotingInfo[Token].proposals[latestProposal].proposalInitiator).transfer(AllVotingInfo[Token].proposals[latestProposal].buyoutPriceStart);
+
+           }
+       } else {
+           if (AllVotingInfo[Token].proposals[latestProposal].active == true) {
+               AllVotingInfo[Token].proposals[latestProposal].active = false;
+           }
+       }
     }
 
     function startBuyoutAuction(baseFractionToken _token, buyoutProposal memory proposal) public {
@@ -323,7 +311,7 @@ contract MainContract is IERC721Receiver {
             } else if (AllVotingInfo[_token].auctions[latestAuction].active == true) {
                 AllVotingInfo[_token].auctions[latestAuction].active == false;
             }
-            
+
             AllVotingInfo[_token].auctions[latestAuction].pricePerToken = AllVotingInfo[_token].auctions[latestAuction].currentBid / _token.totalSupply();
             }
 
@@ -342,98 +330,13 @@ contract MainContract is IERC721Receiver {
     //add non reentract modifier
     function claimFromBuyoutTokens(baseFractionToken _token, uint _amount) public  {
         uint latestAuction = AllVotingInfo[_token].auctions.length;
-    
+
         require(AllVotingInfo[_token].auctions[latestAuction].active == false, "auction still active");
 
         _token.transferFrom(msg.sender, address(this), _amount);
         _token.burn(_amount);
         payable(msg.sender).transfer(AllVotingInfo[_token].auctions[latestAuction].pricePerToken * _amount);
     }
-
-    //function changeVoteOnProposalOrAuction(baseFractionToken _token, bool _newVoteValue) public {
-    //    uint latestProposal = AllVotingInfo[_token].proposals.length;
-    //    uint latestAuction = AllVotingInfo[_token].auctions.length;
-//
-    //    require(AllVotingInfo[_token].proposals[latestProposal].active == true || 
-    //    AllVotingInfo[_token].auctions[latestAuction].active == true, "ERC20 needs to be in proposal or auction first");
-    //    
-    //    //require (isInProposal[_token] == true || isInAuction[_token] == true, 
-    //    //"ERC20 needs to be in proposal or auction first");
-    //    
-    //    if (AllVotingInfo[_token].proposals[latestProposal].active == true ) {
-    //        //require (AllVotingInfo[_token].proposals[latestProposal][msg.sender] == true, 
-    //        require(hasVotedInProposal[msg.sender])
-    //        "this user needs to vote first");
-//
-    //        require (AllVotingInfo[_token].proposals[latestProposal].voteValue[msg.sender] == true && _newVoteValue == false ||
-    //                 AllVotingInfo[_token].proposals[latestProposal].voteValue[msg.sender] == false && _newVoteValue == true,
-    //        "this user is not changing their current vote");
-//
-    //        if (_newVoteValue == true ) {
-    //            AllVotingInfo[_token].proposals[latestProposal].totalAmountDisagree -= _token.balanceOf(msg.sender);
-    //            AllVotingInfo[_token].proposals[latestProposal].totalAmountAgree += _token.balanceOf(msg.sender);
-    //        }
-    //        else {
-    //            AllVotingInfo[_token].proposals[latestProposal].totalAmountAgree -= _token.balanceOf(msg.sender);
-    //            AllVotingInfo[_token].proposals[latestProposal].totalAmountDisagree += _token.balanceOf(msg.sender);
-    //        }
-    //    } else {
-//
-    //        require (AllVotingInfo[_token].auction[latestAuction].hasVoted[msg.sender] == true, 
-    //        "this user needs to vote first");
-    //        
-    //        require (AllVotingInfo[_token].auction[latestAuction].voteValue[msg.sender] == true && _newVoteValue == false ||
-    //                 AllVotingInfo[_token].auction[latestAuction].voteValue[msg.sender] == false && _newVoteValue == true,
-    //        "this user is not changing their current vote");
-//
-    //        //if (_newVoteValue == true ) {
-    //        //    buyoutAuctions[_token].totalAmountDisagree -= _token.balanceOf(msg.sender);
-    //        //    buyoutAuctions[_token].totalAmountAgree += _token.balanceOf(msg.sender);
-    //        //}
-    //        //else {
-    //        //    buyoutAuctions[_token].totalAmountAgree -= _token.balanceOf(msg.sender);
-    //        //    buyoutAuctions[_token].totalAmountDisagree += _token.balanceOf(msg.sender);
-    //        //}
-    //    }
-    //}
-
-
-
-    
-
-  // function getNftDepositsMapping(address _inputAddress) public view returns (CurrentDepositedNFTs memory) {
-   //    return nftDeposits[_inputAddress];
-   //}
-
-   //function getCertainNftDeposits(address _inputAddress, uint _index) public view returns (NFTDeposit memory) {
-   //    return nftDeposits[_inputAddress].deposits[_index];
-   //}
-
-   function getFractionContractAddress(uint _index) public view returns(address) {
-       return nftDeposits[msg.sender].deposits[_index].fractionContractAddress;
-   }
-
-   function getArraySize() public view returns(uint) {
-       return nftDeposits[msg.sender].deposits.length;
-   }
-
-   function getDepositsMade() public view returns(uint) {
-       return depositsMade;
-   }
-
-   //function getFraction(uint _index) public view returns (baseFractionToken) {
-   //    return nftDeposits[msg.sender].deposits[_index].fractionContract;
-   //}
-
-   //function getFractionNFTOwner(uint _index) public view returns (address) {
-   //    return nftDeposits[msg.sender].deposits[_index].fractionContract.getNFTOwner();
-   //}
-
-    
-
-    //function mintNewFractionTokens() public {
-    //    new baseFractionToken(msg.sender, 10, 8000, "yesToken", "YT");
-    //}
 
     function onERC721Received(
         address,
