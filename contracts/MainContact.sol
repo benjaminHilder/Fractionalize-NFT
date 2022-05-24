@@ -7,10 +7,14 @@ import './FractionToken.sol';
 //import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MainContract is IERC721Receiver {
-    const DEFAULT_WAIT_TIME = 259200; // 3 days;
-    const DEFAULT_PROPOSAL_TO_PASS = 50; //50%
+    uint DEFAULT_WAIT_TIME = 259200; // 3 days;
+    uint DEFAULT_PROPOSAL_TO_PASS = 50; //50%
+
+    uint currentLastProposalId;
+    uint currentLastAuctionId;
 
     mapping(address => CurrentDepositedNFTs) nftDeposits;
+    mapping(address => uint) tokenBalances;
     uint depositsMade;
     address contractDeployer;
 
@@ -23,13 +27,14 @@ contract MainContract is IERC721Receiver {
         address owner;
         address NFTContractAddress;
         ERC721 NFT;
+        uint256 supply;
         uint256 tokenId;
         uint256 depositTimestamp;
-        baseFractionToken fractionContract;
         address fractionContractAddress;
-        ERC20 fractionToken;
+        baseFractionToken fractionToken;
         bool hasFractionalised;
         bool canWithdraw;
+        bool isChangingOwnership;
     }
 
     struct CurrentDepositedNFTs {
@@ -37,44 +42,56 @@ contract MainContract is IERC721Receiver {
     }
 
     struct allVotingInfo {
-        buyoutProposals[] proposals;
-        buyoutAuctions[] auctions;
+        buyoutProposal[] proposals;
+        buyoutAuction[] auctions;
     }
 
     struct buyoutProposal {
+        
         bool active;
+
+        NFTDeposit nftDeposit;
 
         address proposalInitiator;
 
+        uint id;
         uint buyoutPriceStart;
         uint totalVoted;
         uint totalAmountAgree;
         uint totalAmountDisagree;
         uint finishTime;
         
-        mapping (address => bool) hasVoted;
-        mapping (address => bool) voteValue;
     }
+    mapping (address => mapping(uint => bool)) hasVotedInProposal;
+    mapping (address => mapping(uint  => bool)) voteValueInProposal;
 
     struct buyoutAuction {
         bool active;
+
+        NFTDeposit nftDeposit;
 
         buyoutProposal initialProposal;
         
         address currentBidLeader;
 
+        uint id;
         uint currentBid;
         uint finishTime;
         uint pricePerToken;
-        
-        mapping (address => bool) hasVoted;
     }
-    mapping(ERC20 => allVotingInfo) AllVotingInfo;
+
+    mapping (address => mapping(uint => bool)) hasVotedInAuction;
+    mapping (address => mapping(uint => bool)) voteValueInAuction;
+
+    mapping(baseFractionToken => allVotingInfo) AllVotingInfo;
     //mapping(address => mapping(ERC20 => uint)) tokenBalances;
 
-    modifier isInProposalOrAuction(ERC20 _ERC20) {
-        require(isInProposal[_ERC20] == false, "Token already in proposal");
-        require(isInAuction[_ERC20] == false, "Token already in auction");
+    modifier isInProposalOrAuction(baseFractionToken token) {
+        uint latestProposal = AllVotingInfo[token].proposals.length;
+        uint latestAuction = AllVotingInfo[token].auctions.length;
+
+        require(AllVotingInfo[token].proposals[latestProposal].active == false, "Token already in proposal");
+        require(AllVotingInfo[token].auctions[latestAuction].active == false, "Token already in auction");
         _;
     }
 
@@ -86,13 +103,30 @@ contract MainContract is IERC721Receiver {
     function updateDepositValue() public {
         depositsMade++;
     }
+
+    function stakeTokens(baseFractionToken _tokens, uint _amount) public {
+        require(_tokens.balanceOf(msg.sender) <= _amount, "you dont have enough tokens");
+
+        //user needs to approve first
+
+        _tokens.transferFrom(msg.sender, address(this), _amount);
+        tokenBalances[msg.sender] += _amount;
+    }
+
+    function unstakeTokens(baseFractionToken _tokens, uint _amount) public {
+        require(tokenBalances[msg.sender] <= _amount, "you dont have enough tokens");
+
+        tokenBalances[msg.sender] -= _amount;
+        _tokens.transfer(msg.sender, _amount);
+    }
+
     function depositNft(address _NFTContractAddress, uint256 _tokenId) public {
 
         NFTDeposit memory newInfo;
         newInfo.NFT = ERC721(_NFTContractAddress);
-        require( newInfo.NFT.ownerOf(_tokenId) == msg.sender, "You do not own this NFT");
+        require(newInfo.NFT.ownerOf(_tokenId) == msg.sender, "You do not own this NFT");
         
-    depositsMade++;
+        depositsMade++;
         //can this be reentrency
         newInfo.NFT.safeTransferFrom(msg.sender, address(this), _tokenId);
         newInfo.NFTContractAddress = _NFTContractAddress;
@@ -119,19 +153,20 @@ contract MainContract is IERC721Receiver {
                 nftDeposits[msg.sender].deposits[i].owner == msg.sender
             ) {
 
-                baseFractionToken fractToken = new baseFractionToken(
+                baseFractionToken fractionToken = new baseFractionToken(
                     msg.sender,
                     //nftDeposits[msg.sender].deposits[i].NFTContractAddress,
                     //nftDeposits[msg.sender].deposits[i].tokenId,
                     _royaltyPercentage,
                     _supply,
                     _tokenName,
-                    _tokenTicker
+                    _tokenTicker,
+                    address (this)
                 );
                 nftDeposits[msg.sender].deposits[i].hasFractionalised = true;
-                nftDeposits[msg.sender].deposits[i].fractionContract = fractToken;
-                nftDeposits[msg.sender].deposits[i].fractionContractAddress = address(fractToken);
-                nftDeposits[msg.sender].deposits[i].fractionToken = ERC20(nftDeposits[msg.sender].deposits[i].fractionContractAddress);
+                nftDeposits[msg.sender].deposits[i].fractionToken = fractionToken;
+                nftDeposits[msg.sender].deposits[i].fractionContractAddress = address(fractionToken);
+                nftDeposits[msg.sender].deposits[i].fractionToken = baseFractionToken(nftDeposits[msg.sender].deposits[i].fractionContractAddress);
                 //newTokenAddress = address(newFraction);
                 break;
             }
@@ -139,17 +174,17 @@ contract MainContract is IERC721Receiver {
     }
 
     function withdrawNft(address _NFTContractAddress, uint256 _tokenId) public {
-        //add require can withdraw
         ERC721 NFTContract = ERC721(_NFTContractAddress);
 
-        //delete withdrawing nft from vault
         for (uint256 i = 0; i < nftDeposits[msg.sender].deposits.length; i++) {
             if (nftDeposits[msg.sender].deposits[i].NFT == NFTContract && 
                 nftDeposits[msg.sender].deposits[i].tokenId == _tokenId)
             {
-                if(nftDeposits[msg.sender].deposits[_tokenId].hasFractionalised == false) {
+                //was hasFractionalised
+                if(nftDeposits[msg.sender].deposits[_tokenId].canWithdraw) {
                     nftDeposits[msg.sender].deposits[_tokenId].NFT.safeTransferFrom(address(this), msg.sender, _tokenId);
                 }
+
                 // if nft owner owns all fractions of NFT
                 else if (nftDeposits[msg.sender].deposits[_tokenId].hasFractionalised == true &&
                 nftDeposits[msg.sender].deposits[_tokenId].fractionToken.balanceOf(msg.sender) == 
@@ -161,6 +196,18 @@ contract MainContract is IERC721Receiver {
         //parentContract.safeTransferFrom(address(this), msg.sender, _tokenId);
     }
 
+    function updateNftOwner(address _oldOwner, address _newOwner, NFTDeposit memory _nftDeposit) public {
+        //add require statement
+        require(_nftDeposit.isChangingOwnership == true, "NFT is not changing ownership");
+
+        //for (uint i = 0; i < nftDeposits[_oldOwner].length; i++) {
+        //    if (nftDeposits[_oldOwner].deposits[i].NFT == ERC721) {
+        //        nftDeposits[_oldOwner].deposits[i].owner = _newOwner;
+        //        nftDeposits[_oldOwner].deposits[i].fractionToken.updateNFTOwner(_newOwner);
+        //    }
+        //}
+    }
+
     function buyoutAllTokens(address _NFTContractAddress, uint256 _tokenId) public {
         ERC721 NFTContract = ERC721(_NFTContractAddress);
 
@@ -169,159 +216,186 @@ contract MainContract is IERC721Receiver {
             if (nftDeposits[msg.sender].deposits[i].NFT == NFTContract && 
                 nftDeposits[msg.sender].deposits[i].tokenId == _tokenId) {
 
-                    ERC20 nftFraction = nftDeposits[msg.sender].deposits[i].ERC20;
-                    for (uint j = 0; j < nftFraction.returnTokenOwners(); j++) {
+                    baseFractionToken nftFraction = nftDeposits[msg.sender].deposits[i].fractionToken;
+                    for (uint j = 0; j < nftFraction.returnTokenOwners().length; j++) {
 
                     }
                 }
             }
     }
 
-    function startBuyoutProposal(ERC20 _ERC20) isInProposalOrAuction(_ERC20) public payable{
-        buyoutProposal memory newProposal;
+    function startBuyoutProposal(baseFractionToken _token, NFTDeposit memory _nftDeposit) isInProposalOrAuction(_token) public payable{
 
-        newProposal.finishTime = block.timestamp += DEFAULT_WAIT_TIME;
+        buyoutProposal memory newProposal; 
+        
+        newProposal.finishTime = block.timestamp + DEFAULT_WAIT_TIME;
         newProposal.buyoutPriceStart = msg.value;
         newProposal.proposalInitiator = msg.sender;
-        newProposal.hasVoted[msg.sender] = true;
-        newProposal.voteValue[msg.sender] = true;
-        newProposal.totalAmountAgree = _ERC20.balanceOf(msg.sender);
+        hasVotedInProposal[msg.sender][currentLastProposalId] = true;
+        newProposal.totalAmountAgree = _token.balanceOf(msg.sender);
         newProposal.totalAmountDisagree = 0;
-        newProposal.totalVoted = _ERC20.balanceOf(msg.sender);
+        newProposal.totalVoted = _token.balanceOf(msg.sender);
         newProposal.active = true;
-
-        AllVotingInfo[_ERC20].proposals.push(newProposal);
+        newProposal.nftDeposit = _nftDeposit;
+        newProposal.id = currentLastProposalId; 
+        AllVotingInfo[_token].proposals.push(newProposal);
+        currentLastProposalId++;
     }
 
-    function voteOnProposal(ERC20 _ERC20, bool _voteValue) public {
-        uint latestProposal = AllVotingInfo[_ERC20].proposals.length;
-        uint latestAuction = AllVotingInfo[_ERC20].auctions.length;
+    function voteOnProposal(NFTDeposit memory _NFTDeposit, bool _voteValue, uint _voteAmount) public {
+        baseFractionToken Token = _NFTDeposit.fractionToken;
+        uint latestProposal = AllVotingInfo[Token].proposals.length;
+        uint latestAuction = AllVotingInfo[Token].auctions.length;
 
-        require (AllVotingInfo[_ERC20].proposals[latestProposal].active == true, "proposal is not active");
-        require (AllVotingInfo[_ERC20].proposals[latestProposal].hasVoted[msg.sender] == false, "this user has already voted");
+        uint id = AllVotingInfo[Token].proposals[latestProposal].id;
 
-        if (block.timestamp < AllVotingInfo[_ERC20].proposal[latestProposal].finishTime) {
-            AllVotingInfo[_ERC20].proposals[latestProposal].hasVoted[msg.sender] = true;
-            AllVotingInfo[_ERC20].proposals[latestProposal].voteValue[msg.sender] = _voteValue;
-            AllVotingInfo[_ERC20].proposals[latestProposal].totalVoted += _ERC20.balanceOf(msg.sender);
+        require (AllVotingInfo[Token].proposals[latestProposal].active == true, "proposal is not active");
+        require (hasVotedInProposal[msg.sender][id] == false, "this user has already voted");
 
-            if (_vote == true) {
-                AllVotingInfo[_ERC20].proposals[latestProposal].totalAmountAgree += _ERC20.balanceOf(msg.sender);
+        if (block.timestamp < AllVotingInfo[Token].proposals[latestProposal].finishTime) {
+            stakeTokens(AllVotingInfo[Token].proposals[latestProposal].nftDeposit.fractionToken, _voteAmount);
+            hasVotedInProposal[msg.sender][id] = true;
+            voteValueInProposal[msg.sender][id] = _voteValue;
+           
+            AllVotingInfo[Token].proposals[latestProposal].totalVoted += _voteAmount;
+
+            if (_voteValue == true) {
+                AllVotingInfo[Token].proposals[latestProposal].totalAmountAgree += _voteAmount;
             } else {
-                AllVotingInfo[_ERC20].proposals[latestProposal].totalAmountDisagree += _ERC20.balanceOf(msg.sender);
+                AllVotingInfo[Token].proposals[latestProposal].totalAmountDisagree += _voteAmount;
             }
 
             // percentage agree
-            if(_ERC20.totalSupply * AllVotingInfo[_ERC20].proposals[latestProposal].totalAmountAgree / 100 
+            if(_NFTDeposit.supply * AllVotingInfo[Token].proposals[latestProposal].totalAmountAgree / 100 
                 >= DEFAULT_PROPOSAL_TO_PASS) {
-                AllVotingInfo[_ERC20].proposals[latestProposal].active = false;
-                startBuyoutAuction(_ERC20);
+                AllVotingInfo[Token].proposals[latestProposal].active = false;
+                startBuyoutAuction(Token, AllVotingInfo[Token].proposals[latestProposal]);
             }
             //percentage disagree
-            else if (_ERC20.totalSupply * AllVotingInfo[_ERC20].proposals[latestProposal].totalAmountDisagree / 100 
+            else if (_NFTDeposit.supply * AllVotingInfo[Token].proposals[latestProposal].totalAmountDisagree / 100 
                     >= DEFAULT_PROPOSAL_TO_PASS) {
-                    AllVotingInfo[_ERC20].proposals[latestProposal].active = false;
-                    AllVotingInfo[_ERC20].proposals[latestProposal].proposalInitiator.transfer(AllVotingInfo[_ERC20].proposals[latestProposal].buyoutPriceStart);
+                    AllVotingInfo[Token].proposals[latestProposal].active = false;
+                    payable(AllVotingInfo[Token].proposals[latestProposal].proposalInitiator).transfer(AllVotingInfo[Token].proposals[latestProposal].buyoutPriceStart);
 
             }
         } else {
-            if (AllVotingInfo[_ERC20].proposals[latestProposal].active == true) {
-                AllVotingInfo[_ERC20].proposals[latestProposal].active = false;
+            if (AllVotingInfo[Token].proposals[latestProposal].active == true) {
+                AllVotingInfo[Token].proposals[latestProposal].active = false;
             }
         }
-
     }
 
-    function startBuyoutAuction(ERC20 _ERC20) public {
-        uint latestProposal = AllVotingInfo[_ERC20].proposals.length;
+    function startBuyoutAuction(baseFractionToken _token, buyoutProposal memory proposal) public {
+        currentLastAuctionId++;
+        uint latestProposal = AllVotingInfo[_token].proposals.length;
 
         buyoutAuction memory newAuction;
-        newAuction.initialProposal = AllVotingInfo[_ERC20].proposals[latestProposal];
-        newAuction.finishTime = block.timestamp += DEFAULT_WAIT_TIME;
+        newAuction.initialProposal = AllVotingInfo[_token].proposals[latestProposal];
+        newAuction.finishTime = block.timestamp + DEFAULT_WAIT_TIME;
         newAuction.currentBid = newAuction.initialProposal.buyoutPriceStart;
         newAuction.currentBidLeader = newAuction.initialProposal.proposalInitiator;
         newAuction.active = true;
+        newAuction.nftDeposit = proposal.nftDeposit;
+        newAuction.id = currentLastAuctionId;
 
-        AllVotingInfo[_ERC20].auctions.push(newAuction);
+        AllVotingInfo[_token].auctions.push(newAuction);
     }
 
-    function bidOnAuction(ERC20 _ERC20, bool _voteValue) public payable{
-        uint latestProposal = AllVotingInfo[_ERC20].proposals.length;
-        uint latestAuction = AllVotingInfo[_ERC20].auctions.length;
+    function bidOnAuction(baseFractionToken _token, bool _voteValue) public payable{
+        uint latestProposal = AllVotingInfo[_token].proposals.length;
+        uint latestAuction = AllVotingInfo[_token].auctions.length;
 
-        if (msg.value <= AllVotingInfo[_ERC20].auction[latestAuction].currentBid) {
-            msg.sender.transfer(msg.value);
+        if (msg.value <= AllVotingInfo[_token].auctions[latestAuction].currentBid) {
+            payable(msg.sender).transfer(msg.value);
         } else { 
 
-            if (block.timestamp < AllVotingInfo[_ERC20].auction[latestAuction].finishTime) { 
-            
-            require (AllVotingInfo[_ERC20].auction[latestAuction].active == true, "proposal is not active");
-            require (AllVotingInfo[_ERC20].auction[latestAuction].hasVoted[msg.sender] == false, "this user has already voted");
-            require (AllVotingInfo[_ERC20].proposal[latestProposal].active == false, "this token needs to leave the proposal first");
+            if (block.timestamp < AllVotingInfo[_token].auctions[latestAuction].finishTime) { 
 
-            uint oldBid = AllVotingInfo[_ERC20].auction[latestAuction].currentBid;
-            address oldLeader = AllVotingInfo[_ERC20].auction[latestAuction].currentBidLeader;
-            AllVotingInfo[_ERC20].auction[latestAuction].currentBid = msg.value;
-            AllVotingInfo[_ERC20].auction[latestAuction].currentBidLeader = msg.sender;
-            oldLeader.transfer(oldBid);
+            require (AllVotingInfo[_token].auctions[latestAuction].active == true, "proposal is not active");
+            require (AllVotingInfo[_token].proposals[latestProposal].active == false, "this token needs to leave the proposal first");
 
-            } else if (AllVotingInfo[_ERC20].auction[latestAuction].active == true) {
-                AllVotingInfo[_ERC20].auction[latestAuction].active == false;
+            uint oldBid = AllVotingInfo[_token].auctions[latestAuction].currentBid;
+            address oldLeader = AllVotingInfo[_token].auctions[latestAuction].currentBidLeader;
+            AllVotingInfo[_token].auctions[latestAuction].currentBid = msg.value;
+            AllVotingInfo[_token].auctions[latestAuction].currentBidLeader = msg.sender;
+            payable(oldLeader).transfer(oldBid);
+
+            } else if (AllVotingInfo[_token].auctions[latestAuction].active == true) {
+                AllVotingInfo[_token].auctions[latestAuction].active == false;
             }
             
-            AllVotingInfo[_ERC20].auction[latestAuction].pricePerToken = AllVotingInfo[_ERC20].auction[latestAuction].currentBid / _ERC20.totalSupply();
-        }
+            AllVotingInfo[_token].auctions[latestAuction].pricePerToken = AllVotingInfo[_token].auctions[latestAuction].currentBid / _token.totalSupply();
+            }
+
+            determineAuctionWinner(AllVotingInfo[_token].auctions[latestAuction], AllVotingInfo[_token].auctions[latestAuction].nftDeposit);
+            AllVotingInfo[_token].auctions[latestAuction].active = false; 
     }
 
-    function claimFromBuyoutTokens(ERC20 _ERC20, uint _amount) public nonReentract() {
-        uint latestAuction = AllVotingInfo[_ERC20].auctions.length;
+    function determineAuctionWinner(buyoutAuction memory _auction, NFTDeposit memory _nftDeposit) private {
+        _nftDeposit.isChangingOwnership = true;
+        updateNftOwner(_nftDeposit.owner, _auction.currentBidLeader, _nftDeposit);
+        _nftDeposit.isChangingOwnership = false;
+
+        _nftDeposit.fractionToken.updateNFTOwner(_auction.currentBidLeader);
+    }
+
+    //add non reentract modifier
+    function claimFromBuyoutTokens(baseFractionToken _token, uint _amount) public  {
+        uint latestAuction = AllVotingInfo[_token].auctions.length;
     
-        require(AllVotingInfo[_ERC20].auction[latestAuction].active == false, "auction still active");
+        require(AllVotingInfo[_token].auctions[latestAuction].active == false, "auction still active");
 
-        _ERC20.transferFrom(msg.sender, address(this), _amount);
-        _ERC20.burn(_amount);
-        msg.sender.transfer(AllVotingInfo[_ERC20].auction[latestAuction].pricePerToken * _amount);
+        _token.transferFrom(msg.sender, address(this), _amount);
+        _token.burn(_amount);
+        payable(msg.sender).transfer(AllVotingInfo[_token].auctions[latestAuction].pricePerToken * _amount);
     }
 
-    function changeVoteOnProposalOrAuction(ERC20 _ERC20, bool _newVoteValue) public {
-        require (isInProposal[_ERC20] == true || isInAuction[_ERC20] == true, 
-        "ERC20 needs to be in proposal or auction first");
-        
-        if (isInProposal[_ERC20] == true) {
-            require (hasVotedInProposal[_ERC20][msg.sender] == true, 
-            "this user needs to vote first");
-
-            require (buyoutProposals[_ERC20].voteValue[msg.sender] == true && _newVoteValue == false ||
-                     buyoutProposals[_ERC20].voteValue[msg.sender] == false && _newVoteValue == true,
-            "this user is not changing their current vote");
-
-            if (_newVoteValue == true ) {
-                buyoutProposals[_ERC20].totalAmountDisagree -= _ERC20.balanceOf(msg.sender);
-                buyoutProposals[_ERC20].totalAmountAgree += _ERC20.balanceOf(msg.sender);
-            }
-            else {
-                buyoutProposals[_ERC20].totalAmountAgree -= _ERC20.balanceOf(msg.sender);
-                buyoutProposals[_ERC20].totalAmountDisagree += _ERC20.balanceOf(msg.sender);
-            }
-        } else {
-
-            require (hasVotedInAuction[_ERC20][msg.sender] == true, 
-            "this user needs to vote first");
-            
-            require (buyoutAuctions[_ERC20].voteValue[msg.sender] == true && _newVoteValue == false ||
-                     buyoutAuctions[_ERC20].voteValue[msg.sender] == false && _newVoteValue == true,
-            "this user is not changing their current vote");
-
-            if (_newVoteValue == true ) {
-                buyoutAuctions[_ERC20].totalAmountDisagree -= _ERC20.balanceOf(msg.sender);
-                buyoutAuctions[_ERC20].totalAmountAgree += _ERC20.balanceOf(msg.sender);
-            }
-            else {
-                buyoutAuctions[_ERC20].totalAmountAgree -= _ERC20.balanceOf(msg.sender);
-                buyoutAuctions[_ERC20].totalAmountDisagree += _ERC20.balanceOf(msg.sender);
-            }
-        }
-    }
+    //function changeVoteOnProposalOrAuction(baseFractionToken _token, bool _newVoteValue) public {
+    //    uint latestProposal = AllVotingInfo[_token].proposals.length;
+    //    uint latestAuction = AllVotingInfo[_token].auctions.length;
+//
+    //    require(AllVotingInfo[_token].proposals[latestProposal].active == true || 
+    //    AllVotingInfo[_token].auctions[latestAuction].active == true, "ERC20 needs to be in proposal or auction first");
+    //    
+    //    //require (isInProposal[_token] == true || isInAuction[_token] == true, 
+    //    //"ERC20 needs to be in proposal or auction first");
+    //    
+    //    if (AllVotingInfo[_token].proposals[latestProposal].active == true ) {
+    //        //require (AllVotingInfo[_token].proposals[latestProposal][msg.sender] == true, 
+    //        require(hasVotedInProposal[msg.sender])
+    //        "this user needs to vote first");
+//
+    //        require (AllVotingInfo[_token].proposals[latestProposal].voteValue[msg.sender] == true && _newVoteValue == false ||
+    //                 AllVotingInfo[_token].proposals[latestProposal].voteValue[msg.sender] == false && _newVoteValue == true,
+    //        "this user is not changing their current vote");
+//
+    //        if (_newVoteValue == true ) {
+    //            AllVotingInfo[_token].proposals[latestProposal].totalAmountDisagree -= _token.balanceOf(msg.sender);
+    //            AllVotingInfo[_token].proposals[latestProposal].totalAmountAgree += _token.balanceOf(msg.sender);
+    //        }
+    //        else {
+    //            AllVotingInfo[_token].proposals[latestProposal].totalAmountAgree -= _token.balanceOf(msg.sender);
+    //            AllVotingInfo[_token].proposals[latestProposal].totalAmountDisagree += _token.balanceOf(msg.sender);
+    //        }
+    //    } else {
+//
+    //        require (AllVotingInfo[_token].auction[latestAuction].hasVoted[msg.sender] == true, 
+    //        "this user needs to vote first");
+    //        
+    //        require (AllVotingInfo[_token].auction[latestAuction].voteValue[msg.sender] == true && _newVoteValue == false ||
+    //                 AllVotingInfo[_token].auction[latestAuction].voteValue[msg.sender] == false && _newVoteValue == true,
+    //        "this user is not changing their current vote");
+//
+    //        //if (_newVoteValue == true ) {
+    //        //    buyoutAuctions[_token].totalAmountDisagree -= _token.balanceOf(msg.sender);
+    //        //    buyoutAuctions[_token].totalAmountAgree += _token.balanceOf(msg.sender);
+    //        //}
+    //        //else {
+    //        //    buyoutAuctions[_token].totalAmountAgree -= _token.balanceOf(msg.sender);
+    //        //    buyoutAuctions[_token].totalAmountDisagree += _token.balanceOf(msg.sender);
+    //        //}
+    //    }
+    //}
 
 
 
