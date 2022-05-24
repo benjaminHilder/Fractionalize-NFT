@@ -99,10 +99,6 @@ contract MainContract is IERC721Receiver {
         require (msg.sender == contractDeployer, "Only contract deployer can call this function");
         _;
     }
-    // mapping nft idenifier => address (owner of nft)
-    function updateDepositValue() public {
-        depositsMade++;
-    }
 
     function stakeTokens(baseFractionToken _tokens, uint _amount) public {
         require(_tokens.balanceOf(msg.sender) <= _amount, "you dont have enough tokens");
