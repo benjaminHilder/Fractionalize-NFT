@@ -1,26 +1,21 @@
+//UNDER DEVELOPNMENT
 pragma solidity 0.8.14;
-import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+
 import './FractionToken.sol';
+import './MainContract.sol';
 
-//import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-
-contract MainContract is IERC721Receiver {
+contract ReclaimNftAuction {
     uint DEFAULT_WAIT_TIME = 259200; // 3 days;
     uint DEFAULT_PROPOSAL_TO_PASS = 50; //50%
 
     uint currentLastProposalId;
     uint currentLastAuctionId;
 
-    mapping(address => CurrentDepositedNFTs) nftDeposits;
     mapping(address => uint) tokenBalances;
-    uint depositsMade;
-    address contractDeployer;
 
-    constructor() {
-        depositsMade = 0;
-        contractDeployer = msg.sender;
+    struct allVotingInfo {
+        buyoutProposal[] proposals;
+        buyoutAuction[] auctions;
     }
 
     struct NFTDeposit {
@@ -35,15 +30,6 @@ contract MainContract is IERC721Receiver {
         bool hasFractionalised;
         bool canWithdraw;
         bool isChangingOwnership;
-    }
-
-    struct CurrentDepositedNFTs {
-        NFTDeposit[] deposits;
-    }
-
-    struct allVotingInfo {
-        buyoutProposal[] proposals;
-        buyoutAuction[] auctions;
     }
 
     struct buyoutProposal {
@@ -62,8 +48,7 @@ contract MainContract is IERC721Receiver {
         uint finishTime;
         
     }
-    mapping (address => mapping(uint => bool)) hasVotedInProposal;
-    mapping (address => mapping(uint  => bool)) voteValueInProposal;
+
 
     struct buyoutAuction {
         bool active;
@@ -79,12 +64,18 @@ contract MainContract is IERC721Receiver {
         uint finishTime;
         uint pricePerToken;
     }
+        
+    struct CurrentDepositedNFTs {
+        NFTDeposit[] deposits;
+    }
+    mapping(address => CurrentDepositedNFTs) nftDeposits;
 
+    mapping (address => mapping(uint => bool)) hasVotedInProposal;
+    mapping (address => mapping(uint  => bool)) voteValueInProposal;
     mapping (address => mapping(uint => bool)) hasVotedInAuction;
     mapping (address => mapping(uint => bool)) voteValueInAuction;
 
     mapping(baseFractionToken => allVotingInfo) AllVotingInfo;
-    //mapping(address => mapping(ERC20 => uint)) tokenBalances;
 
     modifier isProposalOrAuctionNotActive(baseFractionToken token) {
         uint latestProposal = AllVotingInfo[token].proposals.length;
@@ -92,11 +83,6 @@ contract MainContract is IERC721Receiver {
 
         require(AllVotingInfo[token].proposals[latestProposal].active == false, "Token already in proposal");
         require(AllVotingInfo[token].auctions[latestAuction].active == false, "Token already in auction");
-        _;
-    }
-
-    modifier contractDeployerOnly {
-        require (msg.sender == contractDeployer, "Only contract deployer can call this function");
         _;
     }
 
@@ -114,77 +100,6 @@ contract MainContract is IERC721Receiver {
 
         tokenBalances[msg.sender] -= _amount;
         _tokens.transfer(msg.sender, _amount);
-    }
-
-    function depositNft(address _NFTContractAddress, uint256 _tokenId) public {
-
-        NFTDeposit memory newInfo;
-        newInfo.NFT = ERC721(_NFTContractAddress);
-        require(newInfo.NFT.ownerOf(_tokenId) == msg.sender, "You do not own this NFT");
-
-        depositsMade++;
-        //can this be reentrency
-        newInfo.NFT.safeTransferFrom(msg.sender, address(this), _tokenId);
-        newInfo.NFTContractAddress = _NFTContractAddress;
-        newInfo.owner = msg.sender;
-        newInfo.tokenId = _tokenId;
-        newInfo.depositTimestamp = block.timestamp;
-        newInfo.hasFractionalised = false;
-        nftDeposits[msg.sender].deposits.push(newInfo);
-    }
-
-    function createFraction(
-        address _NFTContractAddress,
-        uint256 _tokenId,
-        uint256 _royaltyPercentage,
-        uint256 _supply,
-        string memory _tokenName,
-        string memory _tokenTicker
-    ) public {
-        for (uint256 i = 0; i < nftDeposits[msg.sender].deposits.length; i++) {
-            //if correct nft to createFraction and we are the owner
-            if (nftDeposits[msg.sender].deposits[i].NFTContractAddress ==
-                _NFTContractAddress &&
-                nftDeposits[msg.sender].deposits[i].tokenId == _tokenId &&
-                nftDeposits[msg.sender].deposits[i].owner == msg.sender
-            ) {
-
-                baseFractionToken fractionToken = new baseFractionToken(
-                    msg.sender,
-                    _royaltyPercentage,
-                    _supply,
-                    _tokenName,
-                    _tokenTicker,
-                    address (this)
-                );
-                nftDeposits[msg.sender].deposits[i].hasFractionalised = true;
-                nftDeposits[msg.sender].deposits[i].fractionToken = fractionToken;
-                nftDeposits[msg.sender].deposits[i].fractionContractAddress = address(fractionToken);
-                break;
-            }
-        }
-    }
-
-    function withdrawNft(address _NFTContractAddress, uint256 _tokenId) public {
-        ERC721 NFTContract = ERC721(_NFTContractAddress);
-
-        for (uint256 i = 0; i < nftDeposits[msg.sender].deposits.length; i++) {
-            if (nftDeposits[msg.sender].deposits[i].NFT == NFTContract && 
-                nftDeposits[msg.sender].deposits[i].tokenId == _tokenId)
-            {
-                //was hasFractionalised
-                if(nftDeposits[msg.sender].deposits[_tokenId].canWithdraw) {
-                    nftDeposits[msg.sender].deposits[_tokenId].NFT.safeTransferFrom(address(this), msg.sender, _tokenId);
-                }
-
-                // if nft owner owns all fractions of NFT
-                else if (nftDeposits[msg.sender].deposits[_tokenId].hasFractionalised == true &&
-                nftDeposits[msg.sender].deposits[_tokenId].fractionToken.balanceOf(msg.sender) == 
-                nftDeposits[msg.sender].deposits[_tokenId].fractionToken.totalSupply()) {
-                nftDeposits[msg.sender].deposits[_tokenId].NFT.safeTransferFrom(address(this), msg.sender, _tokenId);
-                }
-            }
-        }
     }
 
     function updateNftOwner(address _oldOwner, address _newOwner, NFTDeposit memory _nftDeposit) public {
@@ -333,15 +248,5 @@ contract MainContract is IERC721Receiver {
         _token.burn(_amount);
         payable(msg.sender).transfer(AllVotingInfo[_token].auctions[latestAuction].pricePerToken * _amount);
     }
-
-    function onERC721Received(
-        address,
-        address from,
-        uint256,
-        bytes calldata
-    ) external pure override returns (bytes4) {
-        // require(from == address(), "Cannot send nfts to Vault dirrectly");
-
-        return IERC721Receiver.onERC721Received.selector;
-    }
 }
+
