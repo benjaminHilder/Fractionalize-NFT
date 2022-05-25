@@ -16,7 +16,6 @@ contract ('MainContract', (accounts) => {
         mainContract = await MainContract.deployed();
         nftContract = await NFTContract.deployed();
 
-
         await nftContract.safeMint(accounts[0], iterator, {from: accounts[0]})
         await nftContract.approve(MainContract.address, iterator, {from: accounts[0]})
         await mainContract.depositNft(nftContract.address, iterator, {from: accounts[0]});
@@ -45,6 +44,7 @@ contract ('MainContract', (accounts) => {
 
         iterator++;
     }) 
+
     it("should be able to withdraw nft", async() => {
         await mainContract.withdrawNft(nftContract.address, iterator, {from: accounts[0]});
 
@@ -53,6 +53,35 @@ contract ('MainContract', (accounts) => {
 
         iterator++;
     })
+
+    it('SHOULDNT be able to create a fraction of an NFT that you havent deposited', async() => {
+        await nftContract.safeMint(accounts[0], 99, {from: accounts[0]})
+        await mainContract.createFraction(nftContract.address, 99, 8, 8000, "tokenName", "TK", {from: accounts[0]})
+        
+        let nftDeposit = await mainContract.getNftDeposit(accounts[0])
+
+        try {
+            let frac = await nftDeposit[99].fractionContractAddress;
+        } catch(e) {
+            console.log("failed to retrieve fraction contract address");
+        }
+
+        iterator++;
+    })
+
+    it('SHOULDNT be able to create a fraction of an NFT  that you do not own', async() => {
+        await mainContract.createFraction(nftContract.address, iterator, 8, 8000, "tokenName", "TK", {from: accounts[1]})
+        let nftDeposit = await mainContract.getNftDeposit(accounts[1])
+
+        try {
+            let frac = await nftDeposit[iterator].fractionContractAddress;
+        } catch(e) {
+            console.log("failed to retrieve fraction contract address");
+        }
+
+        iterator++;
+    })
+
 
     it("SHOULDNT be able to send nft after to has been fractionalised", async() => {
         await mainContract.createFraction(nftContract.address, iterator, 8, 8000, "tokenName", "TK", {from: accounts[0]});

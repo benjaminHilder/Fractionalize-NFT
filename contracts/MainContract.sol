@@ -78,15 +78,6 @@ contract MainContract is IERC721Receiver {
         for (uint256 i = 0; i < nftDeposits[msg.sender].deposits.length; i++) {
             //if correct nft to createFraction and we are the owner
 
-            nftContractAddress = nftDeposits[msg.sender].deposits[i].NFTContractAddress;
-            inputContractAddress = _NFTContractAddress;
-            
-            tokenId = nftDeposits[msg.sender].deposits[i].tokenId;    
-            inputTokenId = _tokenId;
-
-            ownerOf = nftDeposits[msg.sender].deposits[i].owner;
-            msgsender = msg.sender;
-
             if (nftDeposits[msg.sender].deposits[i].NFTContractAddress ==
                 _NFTContractAddress &&
                 nftDeposits[msg.sender].deposits[i].tokenId == _tokenId &&
