@@ -11,6 +11,7 @@ contract MainContract is IERC721Receiver {
 
     uint depositsMade;
     address contractDeployer;
+    address lastAddress;
 
     constructor() {
         depositsMade = 0;
@@ -44,9 +45,7 @@ contract MainContract is IERC721Receiver {
 
         NFTDeposit memory newInfo;
         newInfo.NFT = ERC721(_NFTContractAddress);
-        require(newInfo.NFT.ownerOf(_tokenId) == msg.sender, "You do not own this NFT");
-
-        depositsMade++;
+        //require(newInfo.NFT.ownerOf(_tokenId) == msg.sender, "You do not own this NFT");
         //can this be reentrency
         newInfo.NFT.safeTransferFrom(msg.sender, address(this), _tokenId);
         newInfo.NFTContractAddress = _NFTContractAddress;
@@ -54,8 +53,19 @@ contract MainContract is IERC721Receiver {
         newInfo.tokenId = _tokenId;
         newInfo.depositTimestamp = block.timestamp;
         newInfo.hasFractionalised = false;
+        newInfo.canWithdraw = true;
         nftDeposits[msg.sender].deposits.push(newInfo);
+        lastAddress = msg.sender;
     }
+
+    address nftContractAddress;
+    address inputContractAddress;
+
+    uint tokenId;
+    uint inputTokenId;
+
+    address ownerOf;
+    address msgsender;
 
     function createFraction(
         address _NFTContractAddress,
@@ -67,11 +77,21 @@ contract MainContract is IERC721Receiver {
     ) public {
         for (uint256 i = 0; i < nftDeposits[msg.sender].deposits.length; i++) {
             //if correct nft to createFraction and we are the owner
+
+            nftContractAddress = nftDeposits[msg.sender].deposits[i].NFTContractAddress;
+            inputContractAddress = _NFTContractAddress;
+            
+            tokenId = nftDeposits[msg.sender].deposits[i].tokenId;    
+            inputTokenId = _tokenId;
+
+            ownerOf = nftDeposits[msg.sender].deposits[i].owner;
+            msgsender = msg.sender;
+
             if (nftDeposits[msg.sender].deposits[i].NFTContractAddress ==
                 _NFTContractAddress &&
                 nftDeposits[msg.sender].deposits[i].tokenId == _tokenId &&
-                nftDeposits[msg.sender].deposits[i].owner == msg.sender
-            ) {
+                nftDeposits[msg.sender].deposits[i].owner == msg.sender) 
+            {
 
                 baseFractionToken fractionToken = new baseFractionToken(
                     msg.sender,
@@ -89,26 +109,18 @@ contract MainContract is IERC721Receiver {
         }
     }
 
-    function withdrawNft(address _NFTContractAddress, uint256 _tokenId) public {
-        ERC721 NFTContract = ERC721(_NFTContractAddress);
-
+     function withdrawNft(address _NFTContractAddress, uint256 _tokenId) public {
         for (uint256 i = 0; i < nftDeposits[msg.sender].deposits.length; i++) {
-            if (nftDeposits[msg.sender].deposits[i].NFT == NFTContract && 
-                nftDeposits[msg.sender].deposits[i].tokenId == _tokenId)
-            {
-                //was hasFractionalised
-                if(nftDeposits[msg.sender].deposits[_tokenId].canWithdraw) {
+            if (nftDeposits[msg.sender].deposits[i].NFTContractAddress == _NFTContractAddress &&
+                nftDeposits[msg.sender].deposits[i].tokenId == _tokenId &&
+                nftDeposits[msg.sender].deposits[i].hasFractionalised == false) {
                     nftDeposits[msg.sender].deposits[_tokenId].NFT.safeTransferFrom(address(this), msg.sender, _tokenId);
                 }
-
-                // if nft owner owns all fractions of NFT
-                else if (nftDeposits[msg.sender].deposits[_tokenId].hasFractionalised == true &&
-                nftDeposits[msg.sender].deposits[_tokenId].fractionToken.balanceOf(msg.sender) == 
-                nftDeposits[msg.sender].deposits[_tokenId].fractionToken.totalSupply()) {
-                nftDeposits[msg.sender].deposits[_tokenId].NFT.safeTransferFrom(address(this), msg.sender, _tokenId);
-                }
-            }
         }
+    }
+
+    function getNftDeposit(address _address) public view returns (NFTDeposit[] memory) {
+        return nftDeposits[_address].deposits;
     }
 
     function onERC721Received(
@@ -118,7 +130,7 @@ contract MainContract is IERC721Receiver {
         bytes calldata
     ) external pure override returns (bytes4) {
         // require(from == address(), "Cannot send nfts to Vault dirrectly");
-
+        
         return IERC721Receiver.onERC721Received.selector;
     }
 }
