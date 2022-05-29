@@ -1,8 +1,8 @@
 const { web3 } = require("@openzeppelin/test-helpers/src/setup");
 
 const MainContract = artifacts.require("MainContract");
-const NFTContract = artifacts.require("MyToken");
-const FractionToken = artifacts.require("baseFractionToken");
+const NFTContract = artifacts.require("NFTGenerator");
+
 
 module.exports = async function (deployer, _network, accounts) {
     await deployer.deploy(MainContract);

@@ -100,18 +100,42 @@ contract MainContract is IERC721Receiver {
         }
     }
 
-     function withdrawNft(address _NFTContractAddress, uint256 _tokenId) public {
+     function withdrawNft(address _NFTContractAddress, uint256 _tokenId, baseFractionToken _TokenContractAddress) public {
+        CurrentDepositedNFTs memory userDeposits = nftDeposits[msg.sender];
+        
         for (uint256 i = 0; i < nftDeposits[msg.sender].deposits.length; i++) {
             if (nftDeposits[msg.sender].deposits[i].NFTContractAddress == _NFTContractAddress &&
-                nftDeposits[msg.sender].deposits[i].tokenId == _tokenId &&
-                nftDeposits[msg.sender].deposits[i].hasFractionalised == false) {
-                    nftDeposits[msg.sender].deposits[_tokenId].NFT.safeTransferFrom(address(this), msg.sender, _tokenId);
+                nftDeposits[msg.sender].deposits[i].tokenId == _tokenId) {
+                    uint totalSupply = _TokenContractAddress.totalSupply();
+
+                    if (userDeposits.deposits[i].hasFractionalised == false||
+                        _TokenContractAddress.balanceOf(msg.sender) == totalSupply)
+                        {
+                            nftDeposits[msg.sender].deposits[_tokenId].NFT.safeTransferFrom(address(this), msg.sender, _tokenId);
+                            break;
+                        }
                 }
         }
+    }
+    function getFractionContractAddress(address _address, uint _depositIndex) public view returns (address) {
+        return nftDeposits[_address].deposits[_depositIndex].fractionContractAddress;
     }
 
     function getNftDeposit(address _address) public view returns (NFTDeposit[] memory) {
         return nftDeposits[_address].deposits;
+    }
+
+    function getLastFractionId(address _address) public view returns(uint) {
+        return nftDeposits[_address].deposits.length;
+    }
+
+    function searchForFractionToken(address _NFTContractAddress, uint256 _tokenId) public view returns(baseFractionToken) {
+         for (uint256 i = 0; i < nftDeposits[msg.sender].deposits.length; i++) {
+            if (nftDeposits[msg.sender].deposits[i].NFTContractAddress == _NFTContractAddress &&
+                nftDeposits[msg.sender].deposits[i].tokenId == _tokenId) {
+                    return nftDeposits[msg.sender].deposits[i].fractionToken;
+                }
+         }
     }
 
     function onERC721Received(

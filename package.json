@@ -1,0 +1,32 @@
+{
+  "name": "fractionalisenft-after-split",
+  "version": "1.0.0",
+  "description": "",
+  "main": "truffle-config.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/benjaminHilder/Fractionalise-NFT-Auction.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/benjaminHilder/Fractionalise-NFT-Auction/issues"
+  },
+  "homepage": "https://github.com/benjaminHilder/Fractionalise-NFT-Auction#readme",
+  "dependencies": {
+    "@chakra-ui/react": "^2.1.2",
+    "@emotion/react": "^11.9.0",
+    "@emotion/styled": "^11.8.1",
+    "@openzeppelin/contracts": "^4.6.0",
+    "@truffle/hdwallet-provider": "^2.0.8",
+    "ethers": "^5.6.8",
+    "framer-motion": "^6.3.4",
+    "truffle-flattener": "^1.6.0"
+  }
+}
