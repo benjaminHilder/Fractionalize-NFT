@@ -18,6 +18,8 @@ How to use dapp:
 
 > * nodejs
 > * npm
+> * solidity
+> * javascript
 > * truffle
 > * metamask
 > * react
