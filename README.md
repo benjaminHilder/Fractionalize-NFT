@@ -13,3 +13,13 @@ How to use dapp:
 8) With this contract address you can enter it into your wallet to see your balance. You can also you it in any other dapp that accepts ERC20 for example Uniswap to add a liquidity pool so people can start trading this new ERC20 fractionalised token
 9) If you want to withdraw your NFT from the contract you can do so if you own all the ERC20 fractions. You can do this buy entering in the NFT contract address, fraction address and NFT ID. Click withdraw and accept the transaction
 10) If you want to withdraw your NFT but do not own all the ERC20 fraction addresses, this is coming soon with an auction mechanic. This mechanic will allow users to start a proposal to request a base buyout of all the tokens. If 50% or more the tokens accept this proposal and auction will commence. Any user that wants to buy the NFT can do so by bidding in the auction. Once the auction has finished the winner can claim the NFT. Every token holder will be able claim funds based on how many tokens are in their wallet. The code for the auction is in this repo under contracts/ReclaimNftAuction.sol. It currently needs a few changes but majority of the code is working.
+
+##What I used to develop it:
+
+nodejs
+npm
+truffle
+metamask
+react
+ipfs http client
+openzeppelin
