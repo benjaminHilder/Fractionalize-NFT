@@ -23,5 +23,4 @@ How to use dapp:
 > * truffle
 > * metamask
 > * react
-> * ipfs http client
 > * openzeppelin
