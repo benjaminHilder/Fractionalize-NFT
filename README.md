@@ -1,4 +1,6 @@
 ### Fractionalise NFT to ERC20 Tokens
+Version 2 (under development): https://github.com/benjaminHilder/Fractionalise-NFT-V2
+
 Turn an ERC271 into multiple ERC20. ERC20 can then be used to other dapps that use ERC20 tokens for example uniswap.
 Coming soon: Auction to un-fractionalise your NFT
 
