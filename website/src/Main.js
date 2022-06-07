@@ -4,13 +4,13 @@ import { Box, Button, Flex, Input, Text} from "@chakra-ui/react";
 import  NFTGenerator from './json/NFTGenerator.json';
 import  MainContract from './json/MainContract.json';
 
-const NFTGeneratorAddress = "0xA1F4A809b6aede9924a3a8724A7b359f45eaB9C9";
-const NFTFractionaliseAddress = "0xc1371b0B2EA7F21676062f546559444c95d386aB";
+const NFTGeneratorAddress = "0x5f45E99F6F83630b34c815C585742eac229B2285";
+const NFTFractionaliseAddress = "0x0A414b4252b0d61E5801e82d5AD63fFBf99eda82";
 
 const CreateSampleNft = ({ accounts, setAccounts }) => {
     //const [mintAmount, setMintAmount ] = useState(1);
     const [mintId, setMintId] = useState();
-    const [contractAddress, setContractAddress] = useState("0xA1F4A809b6aede9924a3a8724A7b359f45eaB9C9");
+    const [contractAddress, setContractAddress] = useState("0x5f45E99F6F83630b34c815C585742eac229B2285");
     const [nftId, setNftId] = useState();
     const [nftIdStill, setNFTIdStill] = useState();
     const [fractionIdStill, setFractionIdStill] = useState();
@@ -20,7 +20,7 @@ const CreateSampleNft = ({ accounts, setAccounts }) => {
     const [royalty, setRoyalty] = useState()
 
     const [fractionId, setFractionId] = useState()
-    const [withdrawContractAddress, setWithdrawContractAddress] = useState("0xA1F4A809b6aede9924a3a8724A7b359f45eaB9C9")
+    const [withdrawContractAddress, setWithdrawContractAddress] = useState("0x5f45E99F6F83630b34c815C585742eac229B2285")
     const [withdrawId, setWithdrawId] = useState()
     const [withdrawFractionAddress, setWithdrawFractionAddress] = useState()
     const [fractionAddress, setFractionAddress] = useState()
@@ -557,7 +557,7 @@ const CreateSampleNft = ({ accounts, setAccounts }) => {
                               marginTop="10px"
                              // onClick={handleMint}
                         onClick={() => {
-                            handleWithdraw()
+                            handleWithdraw({gasLimit:30000})
                             //setFractionAddress({fractionAddress});
                         }}
 

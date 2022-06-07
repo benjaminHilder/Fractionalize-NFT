@@ -100,16 +100,17 @@ contract MainContract is IERC721Receiver {
         }
     }
 
-     function withdrawNft(address _NFTContractAddress, uint256 _tokenId, baseFractionToken _TokenContractAddress) public {
+     function withdrawNft(address _NFTContractAddress, uint256 _tokenId, address _TokenContractAddress) public {
         CurrentDepositedNFTs memory userDeposits = nftDeposits[msg.sender];
+        baseFractionToken FractionToken = baseFractionToken(_TokenContractAddress);
         
         for (uint256 i = 0; i < nftDeposits[msg.sender].deposits.length; i++) {
             if (nftDeposits[msg.sender].deposits[i].NFTContractAddress == _NFTContractAddress &&
                 nftDeposits[msg.sender].deposits[i].tokenId == _tokenId) {
-                    uint totalSupply = _TokenContractAddress.totalSupply();
+                    uint totalSupply = FractionToken.totalSupply();
 
                     if (userDeposits.deposits[i].hasFractionalised == false||
-                        _TokenContractAddress.balanceOf(msg.sender) == totalSupply)
+                        FractionToken.balanceOf(msg.sender) == totalSupply)
                         {
                             nftDeposits[msg.sender].deposits[_tokenId].NFT.safeTransferFrom(address(this), msg.sender, _tokenId);
                             break;
