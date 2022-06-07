@@ -39,7 +39,7 @@ return (
         
     )}
 
-    <Text textAlign={"left"}>NFT Contract Address: 0xA1F4A809b6aede9924a3a8724A7b359f45eaB9C9</Text>
+    <Text textAlign={"left"}>NFT Contract Address: 0x5f45E99F6F83630b34c815C585742eac229B2285</Text>
 
     <Flex justify="right" align="right" paddingLeft="30px">
     <Text>Coming soon: Auction Withdraw</Text>
