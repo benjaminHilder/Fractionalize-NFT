@@ -58,15 +58,6 @@ contract MainContract is IERC721Receiver {
         lastAddress = msg.sender;
     }
 
-    address nftContractAddress;
-    address inputContractAddress;
-
-    uint tokenId;
-    uint inputTokenId;
-
-    address ownerOf;
-    address msgsender;
-
     function createFraction(
         address _NFTContractAddress,
         uint256 _tokenId,
