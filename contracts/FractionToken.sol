@@ -15,23 +15,24 @@ contract baseFractionToken is ERC20, ERC20Burnable {
     mapping(address => bool) isHolding;
 
     constructor(address _NFTOwner, uint _royaltyPercentage, uint _supply, string memory _tokenName, string memory _tokenTicker, address _vaultContractAddress) ERC20(_tokenName, _tokenTicker) {
-    NFTOwner = _NFTOwner;
-    RoyaltyPercentage = _royaltyPercentage;
-    _mint(_NFTOwner, _supply);
-    VaultContractAddress = _vaultContractAddress;
+        NFTOwner = _NFTOwner;
+        RoyaltyPercentage = _royaltyPercentage;
+        _mint(_NFTOwner, _supply);
+        VaultContractAddress = _vaultContractAddress;
     }
 
     function transfer(address to, uint256 amount) override public returns (bool) {
+        //calculate royalty fee
         uint royaltyFee = amount * RoyaltyPercentage / 100;
         uint afterRoyaltyFee = amount - royaltyFee;
-        
         address owner = _msgSender();
-        //send royalty
+
+        //send royalty fee to owner
         _transfer(owner, NFTOwner, royaltyFee);
-        //send to new owner
+        //send rest to receiver
         _transfer(owner, to, afterRoyaltyFee);
 
-        addNewUserRemoveOld(to, owner);
+       // addNewUserRemoveOld(to, owner);
         
         return true;
     }
@@ -44,38 +45,20 @@ contract baseFractionToken is ERC20, ERC20Burnable {
         address spender = _msgSender();
         _spendAllowance(from, spender, amount);
 
+        //calculate royalty fee
         uint royaltyFee = amount * RoyaltyPercentage / 100;
         uint afterRoyaltyFee = amount - royaltyFee;
-        //send royalty
-        _transfer(from, NFTOwner, royaltyFee);
-        //send to new owner
-        _transfer(from, to, afterRoyaltyFee);
 
-        addNewUserRemoveOld(to, from);
+        //send royalty fee to owner
+        _transfer(from, NFTOwner, royaltyFee);
+        //send rest to receiver
+        _transfer(from, to, afterRoyaltyFee);
 
         return true;
     }
 
     function burn(uint256 amount) public virtual override {
         _burn(_msgSender(), amount);
-    }
-
-    function addNewUserRemoveOld(address newUser, address oldUser) public{
-        tokenOwners.push(newUser);
-        isHolding[newUser] = true;
-
-        if (isHolding[oldUser] == true &&
-            balanceOf(oldUser) == 0 ) {
-            
-            for (uint i = 0; i < tokenOwners.length; i++) {
-                if (tokenOwners[i] == oldUser) {
-
-                    delete tokenOwners[i];
-                    isHolding[oldUser] = false;
-                    break;
-                }
-            }
-        }
     }
 
     function updateNFTOwner(address _newOwner) public {

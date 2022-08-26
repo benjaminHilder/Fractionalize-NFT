@@ -1,4 +1,5 @@
 //UNDER DEVELOPNMENT
+//NOT IN USE
 pragma solidity 0.8.14;
 
 import './FractionToken.sol';
