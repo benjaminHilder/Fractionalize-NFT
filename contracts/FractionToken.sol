@@ -4,7 +4,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-contract baseFractionToken is ERC20, ERC20Burnable {
+contract FractionToken is ERC20, ERC20Burnable {
     address NFTOwner;
     address VaultContractAddress;
     uint RoyaltyPercentage;

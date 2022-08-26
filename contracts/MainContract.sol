@@ -15,7 +15,7 @@ contract MainContract is IERC721Receiver {
         uint256 tokenId; //NFT ID that was deposited
         uint256 depositTimestamp; //deposited time
         address fractionContractAddress; //address to fraction contract of nft
-        baseFractionToken fractionToken;
+        FractionToken fractionToken;
         bool hasFractionalised; //has deposited nft been fractionaliseds
         bool canWithdraw;
         bool isChangingOwnership; //used for the auction contract
@@ -69,7 +69,7 @@ contract MainContract is IERC721Receiver {
                 nftDeposits[msg.sender].deposits[i].owner == msg.sender) 
             {
                 //instantiate a new fraction token & set the correct data
-                baseFractionToken fractionToken = new baseFractionToken(
+                FractionToken fractionToken = new FractionToken(
                     msg.sender,
                     _royaltyPercentage,
                     _supply,
@@ -88,7 +88,8 @@ contract MainContract is IERC721Receiver {
 
     //if the sender of this transaction has the total supply of fraction tokens or the nft has not be fractionalise, allow withdraw
     function withdrawNft(address _NFTContractAddress, uint256 _tokenId, address _TokenContractAddress) public {
-        baseFractionToken FractionToken = baseFractionToken(_TokenContractAddress);
+        //instance of fraction token via fraction token address
+        FractionToken FractionToken = FractionToken(_TokenContractAddress);
         
         //loop over saved data (NFTDeposit struct) under the address that send that sent this transaction
         for (uint256 i = 0; i < nftDeposits[msg.sender].deposits.length; i++) {
