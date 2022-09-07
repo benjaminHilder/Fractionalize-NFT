@@ -23,11 +23,15 @@
     "@chakra-ui/react": "^2.1.2",
     "@emotion/react": "^11.9.0",
     "@emotion/styled": "^11.8.1",
+    "@nomicfoundation/hardhat-toolbox": "^1.0.2",
     "@openzeppelin/contracts": "^4.7.3",
     "@openzeppelin/test-helpers": "^0.5.15",
     "@truffle/hdwallet-provider": "^2.0.8",
     "ethers": "^5.6.8",
     "framer-motion": "^6.3.4",
     "truffle-flattener": "^1.6.0"
+  },
+  "devDependencies": {
+    "hardhat": "^2.11.1"
   }
 }

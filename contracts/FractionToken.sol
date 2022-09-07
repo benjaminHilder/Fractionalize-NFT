@@ -5,20 +5,25 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 contract FractionToken is ERC20, ERC20Burnable {
-    address NFTOwner;
-    address VaultContractAddress;
-    uint RoyaltyPercentage;
+    address public NFTAddress;
+    address public NFTId;
+    address public NFTOwner;
 
-    ERC721 NFT;
+    address public ContractDeployer;
+    uint public RoyaltyPercentage;
 
     address[] tokenOwners;
     mapping(address => bool) isHolding;
 
-    constructor(address _NFTOwner, uint _royaltyPercentage, uint _supply, string memory _tokenName, string memory _tokenTicker, address _vaultContractAddress) ERC20(_tokenName, _tokenTicker) {
+    constructor(address _NFTAddress, uint _NFTId, address _NFTOwner, uint _royaltyPercentage, uint _supply, string memory _tokenName, string memory _tokenTicker) ERC20(_tokenName, _tokenTicker) {
+        NFTAddress = _NFTAddress;
+        NFTId = _NFTId;
         NFTOwner = _NFTOwner;
         RoyaltyPercentage = _royaltyPercentage;
+        
+        ContractDeployer = msg.sender;
+        
         _mint(_NFTOwner, _supply);
-        VaultContractAddress = _vaultContractAddress;
     }
 
     function transfer(address to, uint256 amount) override public returns (bool) {
