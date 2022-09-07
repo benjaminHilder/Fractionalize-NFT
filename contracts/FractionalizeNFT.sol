@@ -4,7 +4,7 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import './FractionToken.sol';
 
-contract FractionaliseNFT is IERC721Receiver {
+contract FractionalizeNFT is IERC721Receiver {
     mapping(address => DepositFolder) AccessDeposits;
     mapping(address => mapping (uint256 => uint256)) NftIndex;
 
@@ -19,16 +19,16 @@ contract FractionaliseNFT is IERC721Receiver {
         uint256 nftId; 
         uint256 depositTimestamp; //deposited time
         
-        //post fractionalise info
+        //post fractionalize info
         address fractionContractAddress; 
         uint256 supply;
 
-        bool hasFractionalised; //has deposited nft been fractionaliseds
+        bool hasFractionalized; //has deposited nft been fractionalizeds
     }
 
     function depositNft(address _nftContractAddress, uint256 _nftId) public {
         //address must approve this contract to transfer the nft they own before calling this function
-        //fractionalise contract needs to hold the nft so it can be fractionalise
+        //fractionalize contract needs to hold the nft so it can be fractionalize
         ERC721 NFT = ERC721(_nftContractAddress);
         NFT.safeTransferFrom(msg.sender, address(this), _nftId);
 
@@ -39,7 +39,7 @@ contract FractionaliseNFT is IERC721Receiver {
         newDeposit.nftId = _nftId;
         newDeposit.depositTimestamp = block.timestamp;
 
-        newDeposit.hasFractionalised = false;
+        newDeposit.hasFractionalized = false;
 
         //set index location of nft in nft folder to prevent the need of for loops when accessing deposit information
         NftIndex[_nftContractAddress][_nftId] = AccessDeposits[msg.sender].Deposit.length;
@@ -60,7 +60,7 @@ contract FractionaliseNFT is IERC721Receiver {
         uint256 index = NftIndex[_nftContractAddress][_nftId];
         require(AccessDeposits[msg.sender].Deposit[index].owner == msg.sender, "Only the owner of this NFT can access it");
             
-        AccessDeposits[msg.sender].Deposit[index].hasFractionalised = true;
+        AccessDeposits[msg.sender].Deposit[index].hasFractionalized = true;
 
         FractionToken fractionToken = new FractionToken(_nftContractAddress,
                                                         _nftId,
@@ -80,7 +80,7 @@ contract FractionaliseNFT is IERC721Receiver {
         
         FractionToken fraction = FractionToken(_fractionContract);
 
-        require(fraction.ContractDeployer() == address(this), "Only fraction tokens created by this fractionalise contract can be accepted");
+        require(fraction.ContractDeployer() == address(this), "Only fraction tokens created by this fractionalize contract can be accepted");
         require(fraction.balanceOf(msg.sender) == fraction.totalSupply());
 
         address NFTAddress = fraction.NFTAddress();
@@ -97,8 +97,15 @@ contract FractionaliseNFT is IERC721Receiver {
         delete AccessDeposits[msg.sender].Deposit[index];
     }
 
-    function withdrawNftNotFractionalised(address _NftContract, address _NftId) public {
+    function withdrawNftNotFractionalized(address _NftContract, address _NftId) public {
+        uint256 index = NftIndex[_NftContract][_NftId];
+        require (AccessDeposits[msg.sender].Deposit[index].hasFractionalized == false, "Only if the NFT hasn't been fractionalise can you withdraw the NFT with this function");
+        require (AccessDeposits[msg.sender].Deposit[index].owner == msg.sender, "Only the NFT owner can call this function");
 
+        ERC721 NFT = ERC721(_NftContract);
+        NFT.safeTransferFrom(address(this), msg.sender, _NftId);
+
+        delete AccessDeposits[msg.sender].Deposit[index];
     }
 
     //required function for ERC721
