@@ -6,6 +6,7 @@ import './FractionToken.sol';
 
 contract FractionaliseNFT is IERC721Receiver {
     mapping(address => DepositFolder) AccessDeposits;
+    mapping(address => mapping (uint256 => uint256)) NftIndex;
 
     //storage folder that can be expanded to hold more structs and then be accessed by a mapping (nftDeposits)
     struct DepositFolder {
@@ -23,25 +24,25 @@ contract FractionaliseNFT is IERC721Receiver {
         uint256 supply;
 
         bool hasFractionalised; //has deposited nft been fractionaliseds
-        bool canWithdraw;
-        bool isChangingOwnership; //used for the auction contract
     }
 
-    function depositNft(address _NFTContractAddress, uint256 _tokenId) public {
+    function depositNft(address _nftContractAddress, uint256 _nftId) public {
         //address must approve this contract to transfer the nft they own before calling this function
         //fractionalise contract needs to hold the nft so it can be fractionalise
-        ERC721 NFT = ERC721(_NFTContractAddress);
-        NFT.safeTransferFrom(msg.sender, address(this), _tokenId);
+        ERC721 NFT = ERC721(_nftContractAddress);
+        NFT.safeTransferFrom(msg.sender, address(this), _nftId);
 
         DepositInfo memory newDeposit;
 
         newDeposit.owner = msg.sender;
-        newDeposit.nftContractAddress = _NFTContractAddress;
-        newDeposit.nftId = _tokenId;
+        newDeposit.nftContractAddress = _nftContractAddress;
+        newDeposit.nftId = _nftId;
         newDeposit.depositTimestamp = block.timestamp;
 
         newDeposit.hasFractionalised = false;
-        newDeposit.canWithdraw = true;
+
+        //set index location of nft in nft folder to prevent the need of for loops when accessing deposit information
+        NftIndex[_nftContractAddress][_nftId] = AccessDeposits[msg.sender].Deposit.length;
 
         //save the new infomation into the smart contract
         AccessDeposits[msg.sender].Deposit.push(newDeposit);
@@ -53,76 +54,52 @@ contract FractionaliseNFT is IERC721Receiver {
         uint256 _royaltyPercentage,
         uint256 _supply,
         string memory _tokenName,
-        string memory _tokenTicker
-    ) public {
+        string memory _tokenTicker) 
+        public {
         
-        //search for deposited NFT as well make sure the caller is the owner of that NFT
-        for (uint256 i = 0; i < AccessDeposits[msg.sender].Deposit.length; i++) {
-            if (AccessDeposits[msg.sender].Deposit[i].nftContractAddress == _nftContractAddress &&
-                AccessDeposits[msg.sender].Deposit[i].nftId == _nftId &&
-                AccessDeposits[msg.sender].Deposit[i].owner == msg.sender)
+        uint256 index = NftIndex[_nftContractAddress][_nftId];
+        require(AccessDeposits[msg.sender].Deposit[index].owner == msg.sender, "Only the owner of this NFT can access it");
+            
+        AccessDeposits[msg.sender].Deposit[index].hasFractionalised = true;
 
-            //if so create a new fractionalise ERC20 token
-            //fraction ERC20 mints all tokens to owner on constructor
-            {
-                AccessDeposits[msg.sender].Deposit[i].hasFractionalised = true;
-                AccessDeposits[msg.sender].Deposit[i].canWithdraw = false;
+        FractionToken fractionToken = new FractionToken(_nftContractAddress,
+                                                        _nftId,
+                                                        msg.sender,
+                                                        _royaltyPercentage,
+                                                        _supply,
+                                                        _tokenName,
+                                                        _tokenTicker
+                                                        );
 
-                FractionToken fractionToken = new FractionToken(
-                    _nftContractAddress,
-                    _nftId,
-                    msg.sender,
-                    _royaltyPercentage,
-                    _supply,
-                    _tokenName,
-                    _tokenTicker
-                );
-                AccessDeposits[msg.sender].Deposit[i].fractionContractAddress = address(fractionToken);
-                break;
-            }
-        }
+        AccessDeposits[msg.sender].Deposit[index].fractionContractAddress = address(fractionToken);
     }
 
+    //can withdraw the NFT if you own the total supply
+    function withdrawNftWithSupply(address _fractionContract) public {
+        //address must approve this contract to transfer fraction tokens
+        
+        FractionToken fraction = FractionToken(_fractionContract);
 
-    ////if the sender of this transaction has the total supply of fraction tokens or the nft has not be fractionalise, allow withdraw
-    //function withdrawNft(address _NFTContractAddress, uint256 _tokenId, address _TokenContractAddress) public {
-    //    //instance of fraction token via fraction token address
-    //    FractionToken FractionToken = FractionToken(_TokenContractAddress);
-    //    
-    //    //loop over saved data (NFTDeposit struct) under the address that send that sent this transaction
-    //    for (uint256 i = 0; i < nftDeposits[msg.sender].deposits.length; i++) {
-    //        
-    //        //if function arguments match (deposited NFT we are searching for)
-    //        if (nftDeposits[msg.sender].deposits[i].NFTContractAddress == _NFTContractAddress &&
-    //            nftDeposits[msg.sender].deposits[i].tokenId == _tokenId) {
-    //                
-    //                //if the sender of this transaction has the total supply of fraction tokens 
-    //                //or the nft has not be fractionalise
-    //                if (nftDeposits[msg.sender].deposits[i].hasFractionalised == false||
-    //                    FractionToken.balanceOf(msg.sender) == FractionToken.totalSupply())
-    //                    {
-    //                        //transfer to owner
-    //                        nftDeposits[msg.sender].deposits[_tokenId].NFT.safeTransferFrom(address(this), msg.sender, _tokenId);
-    //                        break;
-    //                    }
-    //            }
-    //    }
-    //}
+        require(fraction.ContractDeployer() == address(this), "Only fraction tokens created by this fractionalise contract can be accepted");
+        require(fraction.balanceOf(msg.sender) == fraction.totalSupply());
 
-    //for testing
-    //function getFractionContractAddress(address _address, uint _depositIndex) public view returns (address) {
-    //    return nftDeposits[_address].deposits[_depositIndex].fractionContractAddress;
-    //}
-//
-    ////for testing
-    //function getNftDeposit(address _address) public view returns (NFTDeposit[] memory) {
-    //    return nftDeposits[_address].deposits;
-    //}
-//
-    ////for testing
-    //function getLastFractionId(address _address) public view returns(uint) {
-    //    return nftDeposits[_address].deposits.length;
-    //}
+        address NFTAddress = fraction.NFTAddress();
+        uint256 NFTId = fraction.NFTId();
+
+        //remove tokens from existence as they are no longer valid (NFT leaving this contract)
+        fraction.transferFrom(msg.sender, address(this), fraction.totalSupply());
+        fraction.burn(fraction.totalSupply());
+
+        ERC721 NFT = ERC721(NFTAddress);
+        NFT.safeTransferFrom(address(this), msg.sender, NFTId);
+
+        uint256 index = NftIndex[NFTAddress][NFTId];
+        delete AccessDeposits[msg.sender].Deposit[index];
+    }
+
+    function withdrawNftNotFractionalised(address _NftContract, address _NftId) public {
+
+    }
 
     //required function for ERC721
     function onERC721Received(
@@ -130,9 +107,7 @@ contract FractionaliseNFT is IERC721Receiver {
         address from,
         uint256,
         bytes calldata
-    ) external pure override returns (bytes4) {
-        // require(from == address(), "Cannot send nfts to Vault dirrectly");
-        
+    ) external pure override returns (bytes4) {        
         return IERC721Receiver.onERC721Received.selector;
     }
 }
