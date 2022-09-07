@@ -6,16 +6,16 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 contract FractionToken is ERC20, ERC20Burnable {
     address public NFTAddress;
-    address public NFTId;
+    uint256 public NFTId;
     address public NFTOwner;
 
     address public ContractDeployer;
-    uint public RoyaltyPercentage;
+    uint256 public RoyaltyPercentage;
 
     address[] tokenOwners;
     mapping(address => bool) isHolding;
 
-    constructor(address _NFTAddress, uint _NFTId, address _NFTOwner, uint _royaltyPercentage, uint _supply, string memory _tokenName, string memory _tokenTicker) ERC20(_tokenName, _tokenTicker) {
+    constructor(address _NFTAddress, uint256  _NFTId, address _NFTOwner, uint256  _royaltyPercentage, uint256  _supply, string memory _tokenName, string memory _tokenTicker) ERC20(_tokenName, _tokenTicker) {
         NFTAddress = _NFTAddress;
         NFTId = _NFTId;
         NFTOwner = _NFTOwner;
@@ -67,7 +67,7 @@ contract FractionToken is ERC20, ERC20Burnable {
     }
 
     function updateNFTOwner(address _newOwner) public {
-        require(msg.sender == VaultContractAddress, "Only vault contract can update this nft owner");
+        require(msg.sender == ContractDeployer, "Only contract deployer can call this function");
 
         NFTOwner = _newOwner;
     }
