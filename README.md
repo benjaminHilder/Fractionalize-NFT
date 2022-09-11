@@ -1,2 +1,2 @@
-# Fractionalize a ERC721 into ERC20 tokens!
+# Fractionalize an ERC721 into ERC20 tokens!
 
